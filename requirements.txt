@@ -1,6 +1,5 @@
 numpy
 requests
 rdflib
--e git://github.com/artreven/pp_api.git#egg=pp_api
-
+-e git+git://github.com/Project-PROFIT/pp_api.git@origin/master#egg=pp_api
 

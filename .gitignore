@@ -142,3 +142,5 @@ fabric.properties
 /thesaurus/misc/
 *pycache*
 .idea/
+.project
+.pydevproject
