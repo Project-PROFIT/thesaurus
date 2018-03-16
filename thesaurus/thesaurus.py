@@ -11,6 +11,7 @@ import requests
 import pickle
 import scipy, scipy.sparse
 import pp_api
+from datetime import datetime
 
 
 logging.basicConfig(format='%(name)s at %(asctime)s: %(message)s')
@@ -64,13 +65,19 @@ class Thesaurus(rdflib.graph.Graph):
         return {x[0] for x in s_uri}
 
     def get_labels(self, cpt_uri, lang='en'):
-        labels = self[rdflib.URIRef(cpt_uri):
-                      (rdflib.namespace.SKOS.prefLabel|
-                       rdflib.namespace.SKOS.altLabel|
-                       rdflib.namespace.SKOS.hiddenLabel):]
-        labels = [str(x) for x in labels
-                  if x.language == lang
-                  if not str(x).startswith(':')]
+        filter_label = lambda l: ((l.language is None or l.language == lang) and
+                                  not str(l).startswith(':'))
+        pref_labels = filter(filter_label,
+                             self[rdflib.URIRef(cpt_uri):SKOS.prefLabel:])
+        alt_labels = filter(filter_label,
+                            self[rdflib.URIRef(cpt_uri):SKOS.altLabel:])
+        hidden_labels = filter(filter_label,
+                               self[rdflib.URIRef(cpt_uri):SKOS.hiddenLabel:])
+        labels = {
+            SKOS.prefLabel: list(pref_labels),
+            SKOS.altLabel: list(alt_labels),
+            SKOS.hiddenLabel: list(hidden_labels)
+        }
         return labels
 
     def get_all_concepts_and_labels(self, lang="en"):
@@ -179,11 +186,13 @@ class Thesaurus(rdflib.graph.Graph):
             if cpt_freq > 0:
                 self.add_frequencies(cpt_uri, cpt_freq)
 
-    def query_thesaurus(self, pid, server, auth_data):
-        pp = pp_api.PoolParty(
-            server=server,
-            auth_data=auth_data
-        )
+    def query_thesaurus(self, pid, server=None, auth_data=None, pp=None):
+        assert pp or (server and auth_data)
+        if pp is None:
+            pp = pp_api.PoolParty(
+                server=server,
+                auth_data=auth_data
+            )
         r = pp.export_project(pid=pid)
         self.parse(data=r, format='n3')
         top_cpts = {x[0] for x in self.triples((
@@ -371,6 +380,9 @@ class Thesaurus(rdflib.graph.Graph):
             if cpt_freq > 0:
                 self.add_frequencies(cpt_uri, cpt_freq)
 
+    def get_sim_dict(self, sim_dict_path):
+        return get_sim_dict(sim_dict_path, self)
+
     @classmethod
     def get_the(cls, the_path, auth_data, server, pid,
                 sparql_endpoint=None, cpt_freq_graph=None, with_freqs=True,
@@ -394,6 +406,36 @@ class Thesaurus(rdflib.graph.Graph):
             the.precompute_number_children()
             the.serialize(the_path, format='n3')
         return the
+
+    @classmethod
+    def get_the_pp(cls, the_path, pp, pid, refresh=False, **kwargs):
+        the = cls()
+        if os.path.exists(the_path) and not refresh:
+            logger.info('Thesaurus at {} exists, loading'.format(the_path))
+            with open(the_path, 'rb') as f:
+                the.parse(the_path, format='n3')
+        else:
+            logger.info('Querying thesaurus')
+            the.query_thesaurus(pp=pp, pid=pid)
+            logger.info('Precomputing children')
+            the.precompute_number_children()
+            the.serialize(the_path, format='n3')
+        return the
+
+    @classmethod
+    def check_outdated(cls, the_path, pp, pid):
+        """
+        Check if a newer version is available at the server.
+
+        :param the_path: path to the thesaurus file
+        :param pp: PoolParty instance from github.com/artreven/pp_api
+        :param pid: project id
+        :return: Boolean
+        """
+        modified_unix = os.path.getmtime(the_path)
+        modified_datetime = datetime.utcfromtimestamp(modified_unix)
+        history = pp.get_history(pid=pid, from_=modified_datetime)
+        return history if history else False
 
 
 def create_matrix_from_dict(sim_dict, the):
@@ -488,10 +530,12 @@ def get_sim_dict(sim_dict_path, the, **kwargs):
                             lin0_score[ph] |= brs2
                         for ph in brs2:
                             lin0_score[ph] |= brs1
-                # logger.info('Concept {}, took {:0.3f}'.format(j, time() - start_j))
-            logger.info(
-                'New done in {:0.3f}, shortcut taken {} times, shortcut2 taken {} times'.format(
-                    time() - start, c, c2))
+            logger.debug(
+                'New done in {:0.3f}, '
+                'shortcut taken {} times, '
+                'shortcut2 taken {} times'.format(
+                    time() - start, c, c2)
+            )
 
         sim_dict = scipy.sparse.coo_matrix(sim_dict)
         all_cpts = [str(x) for x in all_cpts]
