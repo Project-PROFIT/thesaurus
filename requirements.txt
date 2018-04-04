@@ -1,5 +1,5 @@
 numpy
 requests
 rdflib
--e git+git://github.com/Project-PROFIT/pp_api.git@origin/master#egg=pp_api
+-e git+git://github.com/Project-PROFIT/pp_api.git@origin/develop#egg=pp_api
 
