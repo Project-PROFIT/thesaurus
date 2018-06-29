@@ -2,7 +2,7 @@ from distutils.core import setup
 
 setup(
     name='thesaurus',
-    version='0.1dev',
+    version='profit-v15',
     packages=['thesaurus',],
     license='',
 )
