@@ -12,7 +12,6 @@ from time import time
 from collections import defaultdict, Counter
 from functools import lru_cache
 
-import pp_api
 from thesaurus.thesaurus import Thesaurus, get_sim_dict
 
 
