@@ -357,11 +357,6 @@ class Thesaurus(rdflib.graph.Graph):
         for x in all_cpts:
             yield x
 
-    def pickle(self, path):
-        import dill
-        with open(path, 'wb') as f:
-            dill.dump(self, f)
-
     def __str__(self):
         out = 'Thesaurus'
         return out
@@ -380,15 +375,15 @@ class Thesaurus(rdflib.graph.Graph):
             if cpt_freq > 0:
                 self.add_frequencies(cpt_uri, cpt_freq)
 
-    def get_sim_dict(self, sim_dict_path):
-        return get_sim_dict(sim_dict_path, self)
+    def get_sim_dict(self, sim_dict_path, refresh=False):
+        return get_sim_dict(sim_dict_path, self, refresh=refresh)
 
     @classmethod
     def get_the(cls, the_path, auth_data, server, pid,
                 sparql_endpoint=None, cpt_freq_graph=None, with_freqs=True,
                 refresh=False, **kwargs):
         the = cls()
-        if os.path.exists(the_path) and not refresh:
+        if the_path is not None and os.path.exists(the_path) and not refresh:
             logger.info('Thesaurus at {} exists, loading'.format(the_path))
             with open(the_path, 'rb') as f:
                 the.parse(the_path, format='n3')
@@ -410,7 +405,7 @@ class Thesaurus(rdflib.graph.Graph):
     @classmethod
     def get_the_pp(cls, the_path, pp, pid, refresh=False, **kwargs):
         the = cls()
-        if os.path.exists(the_path) and not refresh:
+        if the_path is not None and os.path.exists(the_path) and not refresh:
             logger.info('Thesaurus at {} exists, loading'.format(the_path))
             with open(the_path, 'rb') as f:
                 the.parse(the_path, format='n3')
@@ -419,7 +414,8 @@ class Thesaurus(rdflib.graph.Graph):
             the.query_thesaurus(pp=pp, pid=pid)
             logger.info('Precomputing children')
             the.precompute_number_children()
-            the.serialize(the_path, format='n3')
+            if the_path is not None:
+                the.serialize(the_path, format='n3')
         return the
 
     @classmethod
@@ -460,28 +456,28 @@ def create_matrix_from_dict(sim_dict, the):
     return sim_matrix, all_cpts
 
 
-def get_sim_dict(sim_dict_path, the, **kwargs):
+def get_sim_dict(sim_dict_path, the, refresh=False):
     """
     Returns a dictionary whose keys are pairs of concepts, and whose values are
     the Lin-similarity of said concepts. This is done using the thesaurus object
     passed as parameter "the"
     :param sim_dict_path:
     :param the:
-    :param kwargs:
     :return: sim_dict a sparse matrix whose i,j entry stores the similarity 
                       between concepts i and j
              all_cpts a list of URIs, that specifies the order in which the 
                       concepts are considered for sim_dict matrix.
               
     """
-    if os.path.exists(sim_dict_path):
+    if sim_dict_path is not None and os.path.exists(sim_dict_path) and \
+            not refresh:
+        logger.info('Cpt sims at {} exists, loading'.format(sim_dict_path))
         with open(sim_dict_path, 'rb') as f:
             unpickled = pickle.load(f)
             if len(unpickled) == 2:
                 sim_dict, all_cpts = unpickled
             else:
                 sim_dict, all_cpts = create_matrix_from_dict(unpickled, the)
-
     else:
         all_cpts = the.get_all_concepts()
         leaves = the.get_leaves()
@@ -539,8 +535,9 @@ def get_sim_dict(sim_dict_path, the, **kwargs):
 
         sim_dict = scipy.sparse.coo_matrix(sim_dict)
         all_cpts = [str(x) for x in all_cpts]
-        with open(sim_dict_path, 'wb') as f:
-            pickle.dump((sim_dict, all_cpts), f)
+        if sim_dict_path is not None:
+            with open(sim_dict_path, 'wb') as f:
+                pickle.dump((sim_dict, all_cpts), f)
     return sim_dict, all_cpts
 
 
